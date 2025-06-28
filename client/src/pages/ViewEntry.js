@@ -90,6 +90,9 @@ const ViewEntry = () => {
     );
   }
 
+  // Log entry ID for developer verification
+  console.log('Viewing Entry ID:', entry.id);
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
@@ -185,10 +188,7 @@ const ViewEntry = () => {
 
       {/* Navigation */}
       <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
-        <div className="text-sm text-gray-600 dark:text-gray-400">
-          Entry ID: {entry.id}
-        </div>
-        
+        <div />
         <div className="flex items-center space-x-4">
           <Link
             to="/new"

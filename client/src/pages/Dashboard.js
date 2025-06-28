@@ -249,7 +249,7 @@ const Dashboard = () => {
         </div>
         <div className="divide-y divide-gray-200 dark:divide-gray-700">
           {entries.length === 0 ? (
-            <div className="p-12 text-center">
+            <div className="p-12 text-center flex flex-col items-center justify-center">
               <div className="text-gray-400 dark:text-gray-500 mb-4 text-5xl">
                 <span role="img" aria-label="empty">📭</span>
               </div>
@@ -262,8 +262,12 @@ const Dashboard = () => {
                   : 'Start writing your first diary entry'
                 }
               </p>
+              {/* Debug info for troubleshooting */}
+              <pre className="text-xs text-gray-400 bg-gray-50 dark:bg-gray-800 rounded p-2 mb-2">
+                Filters: {JSON.stringify({search: debouncedSearch, tags: debouncedTags})}\nEntries: {JSON.stringify(entries)}
+              </pre>
               {!hasFilters && (
-                <Link to="/new" className="btn-primary text-lg px-6 py-3 rounded-xl">
+                <Link to="/new" className="btn-primary text-lg px-6 py-3 rounded-xl flex items-center justify-center">
                   <Plus className="w-5 h-5 mr-2" />
                   Write Your First Entry
                 </Link>
