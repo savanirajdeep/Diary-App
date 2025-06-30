@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, Tag, Smile } from 'lucide-react';
 import ReactQuill from 'react-quill';
@@ -17,6 +17,7 @@ const NewEntry = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
+  const quillRef = useRef();
 
   const moodOptions = [
     { emoji: '😊', label: 'Happy' },
@@ -103,6 +104,19 @@ const NewEntry = () => {
     const interval = setInterval(handleAutoSave, 30000);
     return () => clearInterval(interval);
   }, [formData]);
+
+  const quillModules = {
+    toolbar: {
+      container: [
+        [{ 'header': [1, 2, 3, false] }],
+        ['bold', 'italic', 'underline', 'strike'],
+        [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+        [{ 'color': [] }, { 'background': [] }],
+        ['link', 'blockquote'],
+        ['clean']
+      ]
+    }
+  };
 
   if (loading) {
     return (
@@ -221,19 +235,11 @@ const NewEntry = () => {
           </label>
           <div className="border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden">
             <ReactQuill
+              ref={quillRef}
               value={formData.content}
               onChange={handleContentChange}
               placeholder="Start writing your thoughts..."
-              modules={{
-                toolbar: [
-                  [{ 'header': [1, 2, 3, false] }],
-                  ['bold', 'italic', 'underline', 'strike'],
-                  [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-                  [{ 'color': [] }, { 'background': [] }],
-                  ['link', 'blockquote'],
-                  ['clean']
-                ]
-              }}
+              modules={quillModules}
               formats={[
                 'header',
                 'bold', 'italic', 'underline', 'strike',

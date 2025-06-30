@@ -9,7 +9,8 @@ import {
   Trash2, 
   Eye,
   Filter,
-  X
+  X,
+  Download
 } from 'lucide-react';
 import axios from 'axios';
 import { format } from 'date-fns';
@@ -28,6 +29,8 @@ const Dashboard = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [deletingId, setDeletingId] = useState(null);
+  const [selectedEntries, setSelectedEntries] = useState([]);
+  const [bulkExporting, setBulkExporting] = useState(false);
 
   // Debounced values
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -103,6 +106,89 @@ const Dashboard = () => {
     } finally {
       setDeletingId(null);
     }
+  };
+
+  const handleBulkExport = async () => {
+    if (selectedEntries.length === 0) {
+      toast.error('Please select entries to export');
+      return;
+    }
+
+    setBulkExporting(true);
+    try {
+      const response = await axios.post('/api/entries/export-bulk', {
+        entryIds: selectedEntries
+      }, {
+        responseType: 'blob'
+      });
+      
+      // Debug: Log response headers
+      console.log('Response headers:', response.headers);
+      console.log('Content-Type:', response.headers['content-type']);
+      console.log('Response data type:', typeof response.data);
+      console.log('Response data size:', response.data.size || response.data.length);
+      
+      // Check if the response is actually a PDF
+      if (!response.headers['content-type'] || !response.headers['content-type'].includes('application/pdf')) {
+        console.error('Expected PDF but got:', response.headers['content-type']);
+        throw new Error('Server returned non-PDF content');
+      }
+      
+      // Create download link with proper blob handling
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `diary_entries_${new Date().toISOString().split('T')[0]}.pdf`);
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }, 100);
+      
+      toast.success(`Exported ${selectedEntries.length} entries successfully!`);
+      setSelectedEntries([]);
+    } catch (error) {
+      console.error('Bulk export failed:', error);
+      console.error('Error response:', error.response);
+      let errorMessage = 'Failed to export entries';
+      
+      if (error.response?.status === 400) {
+        errorMessage = 'Invalid entry selection';
+      } else if (error.response?.status === 404) {
+        errorMessage = 'No entries found';
+      } else if (error.response?.status === 500) {
+        errorMessage = 'Server error while generating PDF';
+      } else if (error.message === 'Server returned non-PDF content') {
+        errorMessage = 'Invalid PDF format received';
+      } else if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Export timed out. Please try again.';
+      }
+      
+      toast.error(errorMessage);
+    } finally {
+      setBulkExporting(false);
+    }
+  };
+
+  const toggleEntrySelection = (entryId) => {
+    setSelectedEntries(prev => 
+      prev.includes(entryId) 
+        ? prev.filter(id => id !== entryId)
+        : [...prev, entryId]
+    );
+  };
+
+  const selectAllEntries = () => {
+    setSelectedEntries(entries.map(entry => entry.id));
+  };
+
+  const clearSelection = () => {
+    setSelectedEntries([]);
   };
 
   const clearFilters = () => {
@@ -242,10 +328,41 @@ const Dashboard = () => {
       {/* Entries List */}
       <div className="card shadow-lg rounded-2xl">
         <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 flex items-center">
-            <span role="img" aria-label="recent">📝</span>
-            <span className="ml-2">Recent Entries</span>
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 flex items-center">
+              <span role="img" aria-label="recent">📝</span>
+              <span className="ml-2">Recent Entries</span>
+            </h2>
+            {entries.length > 0 && selectedEntries.length === 0 && (
+              <button
+                onClick={selectAllEntries}
+                className="btn-secondary text-sm"
+              >
+                Select All
+              </button>
+            )}
+            {selectedEntries.length > 0 && (
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  {selectedEntries.length} selected
+                </span>
+                <button
+                  onClick={handleBulkExport}
+                  disabled={bulkExporting}
+                  className="btn-primary inline-flex items-center text-sm"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  {bulkExporting ? 'Exporting...' : `Export ${selectedEntries.length}`}
+                </button>
+                <button
+                  onClick={clearSelection}
+                  className="btn-secondary text-sm"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+          </div>
         </div>
         <div className="divide-y divide-gray-200 dark:divide-gray-700">
           {entries.length === 0 ? (
@@ -276,29 +393,38 @@ const Dashboard = () => {
           ) : (
             entries.map((entry) => (
               <div key={entry.id} className="p-6 group transition-all hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-xl flex items-start justify-between cursor-pointer">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 truncate">
-                      {entry.title}
-                    </h3>
-                    {entry.mood && (
-                      <span className="text-2xl">{entry.mood}</span>
-                    )}
-                  </div>
-                  <p className="text-base text-gray-600 dark:text-gray-400 mb-2 line-clamp-2">
-                    {entry.content.replace(/<[^>]*>/g, '')}
-                  </p>
-                  <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
-                    <span className="flex items-center">
-                      <Calendar className="w-4 h-4 mr-1" />
-                      {format(new Date(entry.createdAt), 'MMM dd, yyyy')}
-                    </span>
-                    {entry.tags && (
+                <div className="flex items-start space-x-3 flex-1 min-w-0">
+                  <input
+                    type="checkbox"
+                    checked={selectedEntries.includes(entry.id)}
+                    onChange={() => toggleEntrySelection(entry.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="mt-1 h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 truncate">
+                        {entry.title}
+                      </h3>
+                      {entry.mood && (
+                        <span className="text-2xl">{entry.mood}</span>
+                      )}
+                    </div>
+                    <p className="text-base text-gray-600 dark:text-gray-400 mb-2 line-clamp-2">
+                      {entry.content.replace(/<[^>]*>/g, '')}
+                    </p>
+                    <div className="flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400">
                       <span className="flex items-center">
-                        <Tag className="w-4 h-4 mr-1" />
-                        {entry.tags}
+                        <Calendar className="w-4 h-4 mr-1" />
+                        {format(new Date(entry.createdAt), 'MMM dd, yyyy')}
                       </span>
-                    )}
+                      {entry.tags && (
+                        <span className="flex items-center">
+                          <Tag className="w-4 h-4 mr-1" />
+                          {entry.tags}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center space-x-2 ml-4">

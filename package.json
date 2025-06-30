@@ -11,10 +11,16 @@
     "install-all": "npm install && cd server && npm install && cd ../client && npm install",
     "setup-db": "cd server && npx prisma db push && npx prisma generate"
   },
-  "keywords": ["diary", "journal", "react", "nodejs", "mysql"],
+  "keywords": [
+    "diary",
+    "journal",
+    "react",
+    "nodejs",
+    "mysql"
+  ],
   "author": "Rajdeep Savani",
   "license": "MIT",
   "devDependencies": {
     "concurrently": "^8.2.2"
   }
-} 
+}

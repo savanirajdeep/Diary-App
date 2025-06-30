@@ -7,7 +7,8 @@ import {
   Calendar, 
   Tag, 
   Clock,
-  Share2
+  Share2,
+  Download
 } from 'lucide-react';
 import axios from 'axios';
 import { format } from 'date-fns';
@@ -20,6 +21,7 @@ const ViewEntry = () => {
   const [entry, setEntry] = useState(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     fetchEntry();
@@ -63,6 +65,55 @@ const ViewEntry = () => {
     } catch (error) {
       console.error('Failed to copy link:', error);
       toast.error('Failed to copy link');
+    }
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const response = await axios.get(`/api/entries/${id}/export`, {
+        responseType: 'blob'
+      });
+      
+      // Check if the response is actually a PDF
+      if (!response.headers['content-type'] || !response.headers['content-type'].includes('application/pdf')) {
+        throw new Error('Server returned non-PDF content');
+      }
+      
+      // Create download link with proper blob handling
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${entry.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`);
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }, 100);
+      
+      toast.success('PDF exported successfully!');
+    } catch (error) {
+      console.error('Export failed:', error);
+      let errorMessage = 'Failed to export PDF';
+      
+      if (error.response?.status === 404) {
+        errorMessage = 'Entry not found';
+      } else if (error.response?.status === 500) {
+        errorMessage = 'Server error while generating PDF';
+      } else if (error.message === 'Server returned non-PDF content') {
+        errorMessage = 'Invalid PDF format received';
+      } else if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Export timed out. Please try again.';
+      }
+      
+      toast.error(errorMessage);
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -122,6 +173,14 @@ const ViewEntry = () => {
         </div>
         
         <div className="flex items-center space-x-2">
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="p-2 text-gray-400 hover:text-green-600 dark:hover:text-green-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50"
+            title="Export as PDF"
+          >
+            <Download className="w-5 h-5" />
+          </button>
           <button
             onClick={handleShare}
             className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"

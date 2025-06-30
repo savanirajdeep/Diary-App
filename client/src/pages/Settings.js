@@ -5,7 +5,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import toast from 'react-hot-toast';
 
 const Settings = () => {
-  const { user, changePassword } = useAuth();
+  const { user, changePassword, changeDisplayName } = useAuth();
   const { darkMode, toggleDarkMode } = useTheme();
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
@@ -16,6 +16,8 @@ const Settings = () => {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [displayName, setDisplayName] = useState(user?.name || '');
+  const [changingName, setChangingName] = useState(false);
 
   const handlePasswordChange = (e) => {
     setPasswordData({
@@ -52,6 +54,16 @@ const Settings = () => {
     }
   };
 
+  const handleNameSubmit = async (e) => {
+    e.preventDefault();
+    setChangingName(true);
+    const result = await changeDisplayName(displayName);
+    if (result.success) {
+      setDisplayName(displayName);
+    }
+    setChangingName(false);
+  };
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       {/* Header */}
@@ -72,19 +84,32 @@ const Settings = () => {
           </h2>
           
           <div className="space-y-4">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900 rounded-full flex items-center justify-center">
-                <User className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+            <form onSubmit={handleNameSubmit} className="space-y-2">
+              <label htmlFor="displayName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Display Name
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="displayName"
+                  name="displayName"
+                  type="text"
+                  value={displayName}
+                  onChange={e => setDisplayName(e.target.value)}
+                  className="input"
+                  placeholder="Enter your display name"
+                  minLength={2}
+                  maxLength={50}
+                  required
+                />
+                <button
+                  type="submit"
+                  className="btn-primary px-4 py-2"
+                  disabled={changingName || displayName === user?.name}
+                >
+                  {changingName ? 'Saving...' : 'Save'}
+                </button>
               </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {user?.name || 'No name set'}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Display Name
-                </p>
-              </div>
-            </div>
+            </form>
 
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center">

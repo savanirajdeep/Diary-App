@@ -170,4 +170,26 @@ router.put('/change-password', auth, [
   }
 });
 
+// Update display name
+router.put('/update-name', auth, [
+  body('name').trim().isLength({ min: 2, max: 50 })
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    const { name } = req.body;
+    const updatedUser = await prisma.user.update({
+      where: { id: req.user.id },
+      data: { name },
+      select: { id: true, email: true, name: true }
+    });
+    res.json({ message: 'Display name updated successfully', user: updatedUser });
+  } catch (error) {
+    console.error('Update name error:', error);
+    res.status(500).json({ error: 'Server error while updating display name' });
+  }
+});
+
 module.exports = router; 

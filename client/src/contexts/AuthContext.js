@@ -100,6 +100,19 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const changeDisplayName = async (name) => {
+    try {
+      const response = await axios.put('/api/auth/update-name', { name });
+      setUser(response.data.user);
+      toast.success('Display name updated!');
+      return { success: true };
+    } catch (error) {
+      const message = error.response?.data?.error || 'Failed to update display name';
+      toast.error(message);
+      return { success: false, error: message };
+    }
+  };
+
   const value = {
     user,
     loading,
@@ -107,6 +120,7 @@ export const AuthProvider = ({ children }) => {
     register,
     logout,
     changePassword,
+    changeDisplayName,
     isAuthenticated: !!user
   };
 

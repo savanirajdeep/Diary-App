@@ -36,9 +36,9 @@ const Layout = ({ children }) => {
   const isActive = (path) => location.pathname === path;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-row">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
       {/* Sidebar */}
-      <div className="w-64 flex-shrink-0 h-screen bg-white dark:bg-gray-800 shadow-lg flex flex-col">
+      <div className="w-64 flex-shrink-0 bg-white dark:bg-gray-800 shadow-lg flex flex-col">
         <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center">
             <BookOpen className="w-8 h-8 text-primary-600" />
@@ -47,7 +47,7 @@ const Layout = ({ children }) => {
             </span>
           </div>
         </div>
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col flex-1">
           {/* User info */}
           <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center">
@@ -110,10 +110,9 @@ const Layout = ({ children }) => {
         </div>
       </div>
       {/* Main content */}
-      <div className="flex-1 flex flex-col">
-        {/* Remove sticky top bar for perfect alignment */}
+      <div className="flex-1 flex flex-col min-h-screen">
         {/* Page content */}
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-6 overflow-auto">
           {children}
         </main>
       </div>
