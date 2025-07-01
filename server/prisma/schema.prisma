@@ -28,6 +28,7 @@ model DiaryEntry {
   content   String   @db.Text
   tags      String?  // Comma-separated tags
   mood      String?  // Emoji or mood label
+  passcode  String?  // Hashed passcode for entry protection
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())

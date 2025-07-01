@@ -3,6 +3,7 @@ const { body, validationResult } = require('express-validator');
 const prisma = require('../utils/database');
 const auth = require('../middleware/auth');
 const puppeteer = require('puppeteer');
+const bcrypt = require('bcryptjs');
 
 const router = express.Router();
 
@@ -118,7 +119,11 @@ router.get('/', async (req, res) => {
     }
 
     // Main query
-    const sql = `SELECT id, title, content, tags, mood, createdAt, updatedAt\n       FROM diary_entries\n       ${where}\n       ORDER BY ${sortBy} ${sortOrder.toUpperCase()}\n       LIMIT ${Number(limit)} OFFSET ${Number(skip)}`;
+    const sql = `SELECT id, title, content, tags, mood, passcode IS NOT NULL as hasPasscode, createdAt, updatedAt
+       FROM diary_entries
+       ${where}
+       ORDER BY ${sortBy} ${sortOrder.toUpperCase()}
+       LIMIT ${Number(limit)} OFFSET ${Number(skip)}`;
     const countSql = `SELECT COUNT(*) as total FROM diary_entries ${where}`;
     try {
       const entries = await prisma.$queryRawUnsafe(
@@ -130,8 +135,27 @@ router.get('/', async (req, res) => {
         ...params
       );
       const total = Number(countResult[0]?.total || 0);
+      
+      // Convert BigInt values to strings and convert createdAt/updatedAt to ISO strings
+      const sanitizedEntries = entries.map(entry => {
+        const sanitized = {};
+        for (const key in entry) {
+          if (typeof entry[key] === 'bigint') {
+            sanitized[key] = entry[key].toString();
+          } else if (
+            (key === 'createdAt' || key === 'updatedAt') &&
+            (typeof entry[key] === 'string' || typeof entry[key] === 'number' || typeof entry[key] === 'bigint')
+          ) {
+            sanitized[key] = new Date(entry[key]).toISOString();
+          } else {
+            sanitized[key] = entry[key];
+          }
+        }
+        return sanitized;
+      });
+      
       res.json({
-        entries,
+        entries: sanitizedEntries,
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
@@ -156,6 +180,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const { passcode } = req.query;
 
     const entry = await prisma.diaryEntry.findFirst({
       where: {
@@ -168,7 +193,28 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Entry not found' });
     }
 
-    res.json({ entry });
+    // Check if entry is password protected
+    if (entry.passcode) {
+      if (!passcode) {
+        return res.status(403).json({ 
+          error: 'Passcode required',
+          requiresPasscode: true 
+        });
+      }
+
+      // Verify passcode
+      const isValidPasscode = await bcrypt.compare(passcode, entry.passcode);
+      if (!isValidPasscode) {
+        return res.status(403).json({ 
+          error: 'Invalid passcode',
+          requiresPasscode: true 
+        });
+      }
+    }
+
+    // Remove passcode from response for security
+    const { passcode: _, ...entryWithoutPasscode } = entry;
+    res.json({ entry: entryWithoutPasscode });
   } catch (error) {
     console.error('Get entry error:', error);
     res.status(500).json({ error: 'Server error while fetching entry' });
@@ -180,15 +226,30 @@ router.post('/', [
   body('title').trim().isLength({ min: 1, max: 200 }),
   body('content').trim().isLength({ min: 1 }),
   body('tags').optional().trim(),
-  body('mood').optional().trim()
+  body('mood').optional().trim(),
+  body('passcode').optional().trim().custom((value) => {
+    if (value && value.length > 0 && (value.length < 4 || value.length > 20)) {
+      throw new Error('Passcode must be between 4 and 20 characters');
+    }
+    return true;
+  })
 ], async (req, res) => {
   try {
+    // console.log('POST /api/entries - Request body:', req.body);
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { title, content, tags, mood } = req.body;
+    const { title, content, tags, mood, passcode } = req.body;
+
+    // Hash passcode if provided
+    let hashedPasscode = null;
+    if (passcode && passcode.trim()) {
+      hashedPasscode = await bcrypt.hash(passcode.trim(), 10);
+    }
 
     const entry = await prisma.diaryEntry.create({
       data: {
@@ -196,6 +257,7 @@ router.post('/', [
         content,
         tags: tags || null,
         mood: mood || null,
+        passcode: hashedPasscode,
         userId: req.user.id
       },
       select: {
@@ -204,15 +266,13 @@ router.post('/', [
         content: true,
         tags: true,
         mood: true,
+        passcode: true,
         createdAt: true,
         updatedAt: true
       }
     });
 
-    res.status(201).json({
-      message: 'Entry created successfully',
-      entry
-    });
+    res.status(201).json(entry);
   } catch (error) {
     console.error('Create entry error:', error);
     res.status(500).json({ error: 'Server error while creating entry' });
@@ -224,7 +284,13 @@ router.put('/:id', [
   body('title').optional().trim().isLength({ min: 1, max: 200 }),
   body('content').optional().trim().isLength({ min: 1 }),
   body('tags').optional().trim(),
-  body('mood').optional().trim()
+  body('mood').optional().trim(),
+  body('passcode').optional().trim().custom((value) => {
+    if (value && value.length > 0 && (value.length < 4 || value.length > 20)) {
+      throw new Error('Passcode must be between 4 and 20 characters');
+    }
+    return true;
+  })
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -233,7 +299,7 @@ router.put('/:id', [
     }
 
     const { id } = req.params;
-    const { title, content, tags, mood } = req.body;
+    const { title, content, tags, mood, passcode } = req.body;
 
     // Check if entry exists and belongs to user
     const existingEntry = await prisma.diaryEntry.findFirst({
@@ -247,6 +313,16 @@ router.put('/:id', [
       return res.status(404).json({ error: 'Entry not found' });
     }
 
+    // Hash passcode if provided
+    let hashedPasscode = undefined;
+    if (passcode !== undefined) {
+      if (passcode && passcode.trim()) {
+        hashedPasscode = await bcrypt.hash(passcode.trim(), 10);
+      } else {
+        hashedPasscode = null; // Remove passcode
+      }
+    }
+
     // Update entry
     const updatedEntry = await prisma.diaryEntry.update({
       where: { id },
@@ -254,7 +330,8 @@ router.put('/:id', [
         ...(title && { title }),
         ...(content && { content }),
         ...(tags !== undefined && { tags }),
-        ...(mood !== undefined && { mood })
+        ...(mood !== undefined && { mood }),
+        ...(hashedPasscode !== undefined && { passcode: hashedPasscode })
       },
       select: {
         id: true,
@@ -262,6 +339,7 @@ router.put('/:id', [
         content: true,
         tags: true,
         mood: true,
+        passcode: true,
         createdAt: true,
         updatedAt: true
       }
@@ -274,6 +352,48 @@ router.put('/:id', [
   } catch (error) {
     console.error('Update entry error:', error);
     res.status(500).json({ error: 'Server error while updating entry' });
+  }
+});
+
+// Verify passcode for an entry
+router.post('/:id/verify-passcode', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { passcode } = req.body;
+
+    if (!passcode) {
+      return res.status(400).json({ error: 'Passcode is required' });
+    }
+
+    const entry = await prisma.diaryEntry.findFirst({
+      where: {
+        id,
+        userId: req.user.id
+      },
+      select: {
+        id: true,
+        passcode: true
+      }
+    });
+
+    if (!entry) {
+      return res.status(404).json({ error: 'Entry not found' });
+    }
+
+    if (!entry.passcode) {
+      return res.status(400).json({ error: 'Entry is not password protected' });
+    }
+
+    const isValidPasscode = await bcrypt.compare(passcode, entry.passcode);
+    
+    if (isValidPasscode) {
+      res.json({ message: 'Passcode verified successfully' });
+    } else {
+      res.status(403).json({ error: 'Invalid passcode' });
+    }
+  } catch (error) {
+    console.error('Verify passcode error:', error);
+    res.status(500).json({ error: 'Server error while verifying passcode' });
   }
 });
 

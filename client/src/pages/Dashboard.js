@@ -10,7 +10,9 @@ import {
   Eye,
   Filter,
   X,
-  Download
+  Download,
+  FileText,
+  Lock
 } from 'lucide-react';
 import axios from 'axios';
 import { format } from 'date-fns';
@@ -221,13 +223,22 @@ const Dashboard = () => {
             <p className="text-gray-500 text-lg">Ready to write your thoughts today?</p>
           </div>
           <div className="mt-6 md:mt-8">
-            <Link
-              to="/new"
-              className="btn-primary text-lg px-6 py-3 rounded-xl shadow-lg flex items-center gap-2 hover:scale-105 transition-transform"
-            >
-              <Plus className="w-5 h-5" />
-              New Entry
-            </Link>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Link
+                to="/new"
+                className="btn-primary text-lg px-6 py-3 rounded-xl shadow-lg flex items-center gap-2 hover:scale-105 transition-transform"
+              >
+                <Plus className="w-5 h-5" />
+                New Entry
+              </Link>
+              <Link
+                to="/new?template=true"
+                className="btn-secondary text-lg px-6 py-3 rounded-xl shadow-lg flex items-center gap-2 hover:scale-105 transition-transform"
+              >
+                <FileText className="w-5 h-5" />
+                Use Template
+              </Link>
+            </div>
           </div>
         </div>
         {/* Stats Cards */}
@@ -406,6 +417,9 @@ const Dashboard = () => {
                       <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 truncate">
                         {entry.title}
                       </h3>
+                      {entry.hasPasscode && (
+                        <Lock className="w-4 h-4 text-primary-600 dark:text-primary-400" title="Password Protected" />
+                      )}
                       {entry.mood && (
                         <span className="text-2xl">{entry.mood}</span>
                       )}

@@ -1,22 +1,27 @@
 import React, { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Tag, Smile } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { ArrowLeft, Save, Tag, Smile, FileText, Lock } from 'lucide-react';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import LoadingSpinner from '../components/LoadingSpinner';
+import TemplateSelector from '../components/TemplateSelector';
 
 const NewEntry = () => {
   const [formData, setFormData] = useState({
     title: '',
     content: '',
     tags: '',
-    mood: ''
+    mood: '',
+    passcode: ''
   });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
+  const [isApplyingTemplate, setIsApplyingTemplate] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const quillRef = useRef();
 
   const moodOptions = [
@@ -40,10 +45,19 @@ const NewEntry = () => {
   };
 
   const handleContentChange = (content) => {
-    setFormData({
-      ...formData,
+    console.log('handleContentChange called with content:', content);
+    console.log('Content length:', content?.length);
+    
+    // Don't update if we're applying a template
+    if (isApplyingTemplate) {
+      console.log('Skipping content change during template application');
+      return;
+    }
+    
+    setFormData(prevData => ({
+      ...prevData,
       content
-    });
+    }));
   };
 
   const handleMoodSelect = (mood) => {
@@ -53,7 +67,54 @@ const NewEntry = () => {
     });
   };
 
+  const handleTemplateSelect = (template) => {
+    console.log('Template selected:', template);
+    console.log('Template tags:', template.tags);
+    
+    setIsApplyingTemplate(true);
+    
+    const newFormData = {
+      title: template.name === 'Blank Entry' ? '' : template.name,
+      content: template.content,
+      tags: template.tags || '',
+      mood: template.mood || '',
+      passcode: formData.passcode // Preserve existing passcode
+    };
+    
+    console.log('New form data:', newFormData);
+    
+    // Use a callback to ensure state is updated
+    setFormData(prevData => {
+      console.log('Previous form data:', prevData);
+      console.log('Setting new form data:', newFormData);
+      return newFormData;
+    });
+    
+    // Set the content in the Quill editor
+    if (quillRef.current) {
+      quillRef.current.getEditor().root.innerHTML = template.content;
+    }
+    
+    // Reset the flag after a short delay
+    setTimeout(() => {
+      setIsApplyingTemplate(false);
+      const tagsInput = document.getElementById('tags');
+      if (tagsInput) {
+        console.log('Tags input value after timeout:', tagsInput.value);
+        tagsInput.focus();
+        tagsInput.blur();
+      }
+    }, 200);
+    
+    toast.success(`Template "${template.name}" applied!`);
+  };
+
   const handleSave = async (draft = false) => {
+    console.log('handleSave called with draft:', draft);
+    console.log('Current formData:', formData);
+    console.log('Content length:', formData.content?.length);
+    console.log('Content trimmed length:', formData.content?.trim()?.length);
+    
     if (!formData.title.trim()) {
       toast.error('Please enter a title');
       return;
@@ -66,18 +127,32 @@ const NewEntry = () => {
 
     setSaving(true);
     try {
-      const response = await axios.post('/api/entries', {
+      const payload = {
         title: formData.title,
         content: formData.content,
         tags: formData.tags,
-        mood: formData.mood
-      });
+        mood: formData.mood,
+        passcode: formData.passcode
+      };
+      
+      console.log('Sending payload:', payload);
+      
+      const response = await axios.post('/api/entries', payload);
 
+      console.log('Response received:', response.data);
       toast.success(draft ? 'Draft saved!' : 'Entry saved successfully!');
       navigate(`/entry/${response.data.entry.id}`);
     } catch (error) {
       console.error('Error saving entry:', error);
-      toast.error('Failed to save entry');
+      console.error('Error response:', error.response?.data);
+      
+      // Show specific validation errors if available
+      if (error.response?.data?.errors) {
+        const errorMessages = error.response.data.errors.map(err => err.msg).join(', ');
+        toast.error(`Validation error: ${errorMessages}`);
+      } else {
+        toast.error('Failed to save entry');
+      }
     } finally {
       setSaving(false);
     }
@@ -90,7 +165,8 @@ const NewEntry = () => {
           title: formData.title,
           content: formData.content,
           tags: formData.tags,
-          mood: formData.mood
+          mood: formData.mood,
+          passcode: formData.passcode
         });
         toast.success('Auto-saved!');
       } catch (error) {
@@ -103,6 +179,19 @@ const NewEntry = () => {
   React.useEffect(() => {
     const interval = setInterval(handleAutoSave, 30000);
     return () => clearInterval(interval);
+  }, [formData]);
+
+  // Auto-open template selector if template parameter is present
+  React.useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('template') === 'true') {
+      setShowTemplateSelector(true);
+    }
+  }, [location.search]);
+
+  // Debug: Log form data changes
+  React.useEffect(() => {
+    console.log('Form data updated:', formData);
   }, [formData]);
 
   const quillModules = {
@@ -148,6 +237,13 @@ const NewEntry = () => {
         </div>
         
         <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setShowTemplateSelector(true)}
+            className="btn-secondary inline-flex items-center"
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            Templates
+          </button>
           <button
             onClick={() => handleSave(true)}
             disabled={saving}
@@ -228,6 +324,30 @@ const NewEntry = () => {
           </div>
         </div>
 
+        {/* Passcode */}
+        <div>
+          <label htmlFor="passcode" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Passcode (Optional)
+          </label>
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              id="passcode"
+              name="passcode"
+              type="password"
+              value={formData.passcode}
+              onChange={handleChange}
+              className="input pl-10"
+              placeholder="Enter a 4-20 character passcode to protect this entry"
+              minLength="4"
+              maxLength="20"
+            />
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            🔒 This entry will be password-protected. You'll need this passcode to view it later.
+          </p>
+        </div>
+
         {/* Content */}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -256,6 +376,13 @@ const NewEntry = () => {
           💾 Auto-saving every 30 seconds
         </div>
       </div>
+
+      {/* Template Selector Modal */}
+      <TemplateSelector
+        isOpen={showTemplateSelector}
+        onClose={() => setShowTemplateSelector(false)}
+        onSelectTemplate={handleTemplateSelect}
+      />
     </div>
   );
 };

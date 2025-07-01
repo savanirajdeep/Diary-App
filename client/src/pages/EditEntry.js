@@ -6,6 +6,7 @@ import 'react-quill/dist/quill.snow.css';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import LoadingSpinner from '../components/LoadingSpinner';
+import PasscodeModal from '../components/PasscodeModal';
 
 const EditEntry = () => {
   const { id } = useParams();
@@ -19,6 +20,8 @@ const EditEntry = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showPasscodeModal, setShowPasscodeModal] = useState(false);
+  const [requiresPasscode, setRequiresPasscode] = useState(false);
   const quillRef = useRef();
 
   const moodOptions = [
@@ -36,11 +39,16 @@ const EditEntry = () => {
 
   useEffect(() => {
     fetchEntry();
+    // eslint-disable-next-line
   }, [id]);
 
-  const fetchEntry = async () => {
+  const fetchEntry = async (passcode = null) => {
+    setLoading(true);
     try {
-      const response = await axios.get(`/api/entries/${id}`);
+      const url = passcode
+        ? `/api/entries/${id}?passcode=${encodeURIComponent(passcode)}`
+        : `/api/entries/${id}`;
+      const response = await axios.get(url);
       const entry = response.data.entry;
       setFormData({
         title: entry.title,
@@ -48,13 +56,26 @@ const EditEntry = () => {
         tags: entry.tags || '',
         mood: entry.mood || ''
       });
+      setRequiresPasscode(false);
+      setShowPasscodeModal(false);
     } catch (error) {
       console.error('Error fetching entry:', error);
-      toast.error('Failed to load entry');
-      navigate('/dashboard');
+      if (error.response?.status === 403 && error.response?.data?.requiresPasscode) {
+        setRequiresPasscode(true);
+        setShowPasscodeModal(true);
+      } else if (error.response?.status === 404) {
+        setFormData(null); // Show 'Entry not found'
+      } else {
+        toast.error('Failed to load entry');
+        navigate('/dashboard');
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePasscodeVerify = async (passcode) => {
+    await fetchEntry(passcode);
   };
 
   const handleChange = (e) => {
@@ -139,11 +160,41 @@ const EditEntry = () => {
     }
   };
 
-  if (loading) {
+  if (loading && !requiresPasscode) {
     return (
       <div className="flex items-center justify-center h-64">
         <LoadingSpinner size="lg" />
       </div>
+    );
+  }
+
+  if (formData === null && !requiresPasscode) {
+    return (
+      <div className="text-center py-12">
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
+          Entry not found
+        </h2>
+        <p className="text-gray-600 dark:text-gray-400 mb-4">
+          The entry you're looking for doesn't exist or has been deleted.
+        </p>
+        <button onClick={() => navigate('/dashboard')} className="btn-primary">
+          Back to Dashboard
+        </button>
+      </div>
+    );
+  }
+
+  if (requiresPasscode) {
+    return (
+      <PasscodeModal
+        isOpen={showPasscodeModal}
+        onClose={() => {
+          setShowPasscodeModal(false);
+          navigate('/dashboard');
+        }}
+        onVerify={handlePasscodeVerify}
+        title={formData?.title || 'Protected Entry'}
+      />
     );
   }
 
